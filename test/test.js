@@ -32,7 +32,8 @@ describe("cases", () => {
         Object.assign({
           name: "exported",
           code: input,
-          parse: code => parse(code, {sourceType: "module"})
+          parse: code => parse(code, {sourceType: "module"}),
+          sourcemap: true
         }, options)
       );
       assert.equal(result.code, output);

@@ -115,7 +115,7 @@ function transform({
   
   return {
     code: code.toString(),
-    map: sourcemap ? code.generateMap() : null
+    map: sourcemap ? code.generateMap({hires: true}) : null
   };
   
   function getReturn() {
