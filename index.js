@@ -35,7 +35,10 @@ function analyzeExportDefault(node, exportBindings, code) {
 function analyzeExportNamed(node, exportBindings, code) {
   if (!node.declaration) {
     for (const spec of node.specifiers) {
-      exportBindings.set(spec.exported.name, spec.local.name);
+      exportBindings.set(
+        spec.exported.name, node.source ?
+        [spec.local.name, node.source.value] : spec.local.name
+      );
     }
     code.remove(node.start, node.end);
   } else {
@@ -127,9 +130,16 @@ function transform({
     }
     return `return {\n${
       [...exportBindings.entries()]
-        .map(([left, right]) => `  ${left}: ${right}`)
+        .map(([left, right]) => `  ${left}: ${getName(right)}`)
         .join(",\n")
     }\n};\n`;
+    
+    function getName(name) {
+      if (Array.isArray(name)) {
+        return getBindingName(name);
+      }
+      return name;
+    }
   }
   
   function getPrefix() {
