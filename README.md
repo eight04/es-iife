@@ -63,8 +63,7 @@ const result = await transform({
   code: String,
   parse?: Function,
   ast?: Object,
-  sourceMap?: Boolean,
-  nested?: Boolean,
+  sourcemap?: Boolean,
   resolveGlobal?: (importPath: String) => globalVariableName: String,
   name?: String
 });

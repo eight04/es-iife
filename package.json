@@ -29,9 +29,14 @@
     "sinon": "^6.1.5"
   },
   "dependencies": {
+    "camelcase": "^5.0.0",
     "estree-walker": "^0.5.1",
     "is-reference": "^1.1.0",
     "magic-string": "^0.25.0",
     "rollup-pluginutils": "^2.0.1"
-  }
+  },
+  "eslintIgnore": [
+    "test/cases",
+    "coverage"
+  ]
 }
