@@ -2,7 +2,7 @@ es-iife
 =======
 
 [![Build Status](https://travis-ci.org/eight04/es-iife.svg?branch=master)](https://travis-ci.org/eight04/es-iife)
-[![Coverage Status](https://coveralls.io/repos/github/eight04/es-iife/badge.svg?branch=master)](https://coveralls.io/github/eight04/es-iife?branch=master)
+[![codecov](https://codecov.io/gh/eight04/es-iife/branch/master/graph/badge.svg)](https://codecov.io/gh/eight04/es-iife)
 [![install size](https://packagephobia.now.sh/badge?p=es-iife)](https://packagephobia.now.sh/result?p=es-iife)
 
 Transform ES module into a simple IIFE.
