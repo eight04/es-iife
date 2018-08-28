@@ -83,6 +83,10 @@ The `result` object has following members:
 Changelog
 ---------
 
+* 0.1.1 (Aug 28, 2018)
+
+  - Fix: export from statements.
+
 * 0.1.0 (Aug 28, 2018)
 
   - Initial release.
