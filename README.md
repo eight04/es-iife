@@ -40,7 +40,7 @@ console.log(result.code);
 /* ->
 var doFoo = (function () {
 
-var main = (value) => return FOO(value);
+const main = (value) => return FOO(value);
 
 return main;
 })();
