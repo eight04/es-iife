@@ -1,5 +1,5 @@
 var exported = (function () {
-var foo = "123";
+const foo = "123";
 
 return {
   bar: foo
