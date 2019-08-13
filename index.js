@@ -14,7 +14,7 @@ function analyzeImport(node, importBindings, code) {
   }
 }
 
-function analyzeExportDefault(node, exportBindings, code) {
+function analyzeExportDefault(node, exportBindings, code, es5) {
   if (node.declaration.type === "Identifier") {
     exportBindings.set("default", node.declaration.name);
     code.remove(node.start, node.end);
@@ -28,7 +28,10 @@ function analyzeExportDefault(node, exportBindings, code) {
     code.remove(node.start, node.declaration.start);
   } else {
     exportBindings.set("default", "_iife_default");
-    code.overwrite(node.start, node.declaration.start, "const _iife_default = ", {contentOnly: true});
+    code.overwrite(node.start, node.declaration.start,
+      `${es5 ? "var" : "const"} _iife_default = `, {
+      contentOnly: true
+    });
   }
 }
 
@@ -59,31 +62,32 @@ function transform({
   ast = parse(code),
   sourcemap = false,
   resolveGlobal = () => {},
-  name
+  name,
+  es5 = false
 }) {
   code = new MagicString(code);
   resolveGlobal = createResolveGlobal(resolveGlobal);
-  
+
   const importBindings = new Map; // name -> [property, source]
   const exportBindings = new Map;
   let scope = attachScopes(ast, "scope");
-  
+
   for (const node of ast.body) {
     if (node.type === "ImportDeclaration") {
       analyzeImport(node, importBindings, code);
     } else if (node.type === "ExportDefaultDeclaration") {
-      analyzeExportDefault(node, exportBindings, code);
+      analyzeExportDefault(node, exportBindings, code, es5);
     } else if (node.type === "ExportNamedDeclaration") {
       analyzeExportNamed(node, exportBindings, code);
     }
   }
-  
+
   const globals = new Set;
-  
+
   for (const [, source] of importBindings.values()) {
     globals.add(resolveGlobal(source));
   }
-  
+
   walk(ast, {
     enter(node, parent) {
       if (/^(import|export)/i.test(node.type)) {
@@ -106,7 +110,7 @@ function transform({
       }
     }
   });
-  
+
   code.appendLeft(
     ast.body[0].start,
     `${getPrefix()}(function () {\n`
@@ -115,12 +119,12 @@ function transform({
     ast.body[ast.body.length - 1].end,
     `\n${getReturn()}})();`
   );
-  
+
   return {
     code: code.toString(),
     map: sourcemap ? code.generateMap({hires: true}) : null
   };
-  
+
   function getReturn() {
     if (!exportBindings.size) {
       return "";
@@ -133,7 +137,7 @@ function transform({
         .map(([left, right]) => `  ${left}: ${getName(right)}`)
         .join(",\n")
     }\n};\n`;
-    
+
     function getName(name) {
       if (Array.isArray(name)) {
         return getBindingName(name);
@@ -141,18 +145,18 @@ function transform({
       return name;
     }
   }
-  
+
   function getPrefix() {
     return exportBindings.size ? `var ${name} = ` : "";
   }
-  
+
   function getBindingName([prop, source]) {
     if (prop === "default") {
       return resolveGlobal(source);
     }
     return `${resolveGlobal(source)}.${prop}`;
   }
-  
+
   function overwriteVar(node, parent, name) {
     if (node.name === name || node.isOverwritten) {
       return;
@@ -165,10 +169,10 @@ function transform({
     // with object shorthand, the node would be accessed twice (.key and .value)
     node.isOverwritten = true;
   }
-  
+
   function createResolveGlobal(resolveGlobal) {
     const cache = new Map;
-    
+
     return name => {
       if (!cache.has(name)) {
         cache.set(name, resolveGlobal(name) || camelcase(name));
