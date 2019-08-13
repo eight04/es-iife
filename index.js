@@ -14,7 +14,7 @@ function analyzeImport(node, importBindings, code) {
   }
 }
 
-function analyzeExportDefault(node, exportBindings, code, es5) {
+function analyzeExportDefault(node, exportBindings, code) {
   if (node.declaration.type === "Identifier") {
     exportBindings.set("default", node.declaration.name);
     code.remove(node.start, node.end);
@@ -28,8 +28,7 @@ function analyzeExportDefault(node, exportBindings, code, es5) {
     code.remove(node.start, node.declaration.start);
   } else {
     exportBindings.set("default", "_iife_default");
-    code.overwrite(node.start, node.declaration.start,
-      `${es5 ? "var" : "const"} _iife_default = `, {
+    code.overwrite(node.start, node.declaration.start, "var _iife_default = ", {
       contentOnly: true
     });
   }
@@ -62,8 +61,7 @@ function transform({
   ast = parse(code),
   sourcemap = false,
   resolveGlobal = () => {},
-  name,
-  es5 = false
+  name
 }) {
   code = new MagicString(code);
   resolveGlobal = createResolveGlobal(resolveGlobal);
@@ -76,7 +74,7 @@ function transform({
     if (node.type === "ImportDeclaration") {
       analyzeImport(node, importBindings, code);
     } else if (node.type === "ExportDefaultDeclaration") {
-      analyzeExportDefault(node, exportBindings, code, es5);
+      analyzeExportDefault(node, exportBindings, code);
     } else if (node.type === "ExportNamedDeclaration") {
       analyzeExportNamed(node, exportBindings, code);
     }
