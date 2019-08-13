@@ -30,7 +30,6 @@ const result = transform({
   code,
   parse,
   name: "doFoo",
-  es5: false,
   resolveGlobal: (name) => {
     if (name === "./foo.js") {
       return "FOO";
@@ -64,8 +63,7 @@ const result = transform({
   ast?: Object,
   sourcemap?: Boolean,
   resolveGlobal?: (importPath: String) => globalVariableName: String,
-  name?: String,
-  es5?: Boolean
+  name?: String
 });
 ```
 
@@ -77,8 +75,6 @@ const result = transform({
 
 `sourcemap` - if true then generate the sourcemap.
 
-`es5` - if true will write ES5 syntax (`var`)
-
 The `result` object has following members:
 
 * `code`: string. The result JavaScript code.
@@ -89,7 +85,7 @@ Changelog
 
 * 0.1.2 (Aug 13, 2019)
 
-  - Add: supports older ECMAScript (pre ES6) `var`
+  - Changed: supports older ECMAScript (pre ES6) using `var` instead of `const`
 
 * 0.1.1 (Aug 28, 2018)
 
