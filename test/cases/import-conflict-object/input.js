@@ -1,3 +1,3 @@
 import bar from "foo";
-const {foo} = baz;
+var {foo} = baz;
 console.log(bar, {foo});

@@ -1,5 +1,5 @@
 (function () {
 
-const {foo: _local_foo} = baz;
+var {foo: _local_foo} = baz;
 console.log(foo, {foo: _local_foo});
 })();
