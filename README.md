@@ -83,9 +83,9 @@ The `result` object has following members:
 Changelog
 ---------
 
-* 0.1.2 (Aug 13, 2019)
+* 0.2.0 (Aug 14, 2019)
 
-  - Changed: supports older ECMAScript (pre ES6) using `var` instead of `const`
+  - Change: define default export with `var`.
 
 * 0.1.1 (Aug 28, 2018)
 
