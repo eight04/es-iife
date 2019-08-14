@@ -27,7 +27,7 @@ describe("cases", () => {
       const options = requireFile("options.js") || {};
       const input = readFile("input.js");
       const output = readFile("output.js");
-      
+
       const result = transform(
         Object.assign({
           name: "exported",

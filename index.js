@@ -28,7 +28,9 @@ function analyzeExportDefault(node, exportBindings, code) {
     code.remove(node.start, node.declaration.start);
   } else {
     exportBindings.set("default", "_iife_default");
-    code.overwrite(node.start, node.declaration.start, "const _iife_default = ", {contentOnly: true});
+    code.overwrite(node.start, node.declaration.start, "var _iife_default = ", {
+      contentOnly: true
+    });
   }
 }
 
@@ -63,11 +65,11 @@ function transform({
 }) {
   code = new MagicString(code);
   resolveGlobal = createResolveGlobal(resolveGlobal);
-  
+
   const importBindings = new Map; // name -> [property, source]
   const exportBindings = new Map;
   let scope = attachScopes(ast, "scope");
-  
+
   for (const node of ast.body) {
     if (node.type === "ImportDeclaration") {
       analyzeImport(node, importBindings, code);
@@ -77,13 +79,13 @@ function transform({
       analyzeExportNamed(node, exportBindings, code);
     }
   }
-  
+
   const globals = new Set;
-  
+
   for (const [, source] of importBindings.values()) {
     globals.add(resolveGlobal(source));
   }
-  
+
   walk(ast, {
     enter(node, parent) {
       if (/^(import|export)/i.test(node.type)) {
@@ -106,7 +108,7 @@ function transform({
       }
     }
   });
-  
+
   code.appendLeft(
     ast.body[0].start,
     `${getPrefix()}(function () {\n`
@@ -115,12 +117,12 @@ function transform({
     ast.body[ast.body.length - 1].end,
     `\n${getReturn()}})();`
   );
-  
+
   return {
     code: code.toString(),
     map: sourcemap ? code.generateMap({hires: true}) : null
   };
-  
+
   function getReturn() {
     if (!exportBindings.size) {
       return "";
@@ -133,7 +135,7 @@ function transform({
         .map(([left, right]) => `  ${left}: ${getName(right)}`)
         .join(",\n")
     }\n};\n`;
-    
+
     function getName(name) {
       if (Array.isArray(name)) {
         return getBindingName(name);
@@ -141,18 +143,18 @@ function transform({
       return name;
     }
   }
-  
+
   function getPrefix() {
     return exportBindings.size ? `var ${name} = ` : "";
   }
-  
+
   function getBindingName([prop, source]) {
     if (prop === "default") {
       return resolveGlobal(source);
     }
     return `${resolveGlobal(source)}.${prop}`;
   }
-  
+
   function overwriteVar(node, parent, name) {
     if (node.name === name || node.isOverwritten) {
       return;
@@ -165,10 +167,10 @@ function transform({
     // with object shorthand, the node would be accessed twice (.key and .value)
     node.isOverwritten = true;
   }
-  
+
   function createResolveGlobal(resolveGlobal) {
     const cache = new Map;
-    
+
     return name => {
       if (!cache.has(name)) {
         cache.set(name, resolveGlobal(name) || camelcase(name));
