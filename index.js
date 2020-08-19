@@ -159,13 +159,15 @@ function transform({
     if (node.name === name || node.isOverwritten) {
       return;
     }
-    if (parent.type === "Property" && parent.key === parent.value) {
+    if (parent.type === "Property" && parent.key.start === parent.value.start) {
       code.appendLeft(node.end, `: ${name}`);
+      parent.key.isOverwritten = true;
+      parent.value.isOverwritten = true;
     } else {
       code.overwrite(node.start, node.end, name, {contentOnly: true});
+      // with object shorthand, the node would be accessed twice (.key and .value)
+      node.isOverwritten = true;
     }
-    // with object shorthand, the node would be accessed twice (.key and .value)
-    node.isOverwritten = true;
   }
 
   function createResolveGlobal(resolveGlobal) {
