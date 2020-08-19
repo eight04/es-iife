@@ -2,7 +2,7 @@ const camelcase = require("camelcase");
 const MagicString = require("magic-string");
 const {walk} = require("estree-walker");
 const isReference = require("is-reference");
-const {attachScopes} = require("rollup-pluginutils");
+const {attachScopes} = require("@rollup/pluginutils");
 
 function analyzeImport(node, importBindings, code) {
   code.remove(node.start, node.end);

@@ -32,7 +32,7 @@ describe("cases", () => {
         Object.assign({
           name: "exported",
           code: input,
-          parse: code => parse(code, {sourceType: "module"}),
+          parse: code => parse(code, {sourceType: "module", ecmaVersion: 2020}),
           sourcemap: true
         }, options)
       );
