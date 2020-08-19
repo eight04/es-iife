@@ -14,7 +14,7 @@
     "lib"
   ],
   "scripts": {
-    "test": "eslint **/*.js --cache && nyc --reporter=html mocha",
+    "test": "eslint **/*.js --cache && c8 --reporter=html mocha",
     "preversion": "npm test",
     "postversion": "git push --follow-tags && npm publish"
   },
@@ -22,18 +22,18 @@
   "author": "eight04 <eight04@gmail.com>",
   "license": "MIT",
   "devDependencies": {
-    "acorn": "^5.5.3",
-    "eslint": "^5.16.0",
-    "mocha": "^5.1.1",
-    "nyc": "^14.1.1",
-    "sinon": "^6.1.5"
+    "acorn": "^8.0.1",
+    "c8": "^7.3.0",
+    "eslint": "^7.7.0",
+    "mocha": "^8.1.1",
+    "sinon": "^9.0.3"
   },
   "dependencies": {
-    "camelcase": "^5.0.0",
-    "estree-walker": "^0.5.1",
-    "is-reference": "^1.1.0",
-    "magic-string": "^0.25.0",
-    "rollup-pluginutils": "^2.8.1"
+    "@rollup/pluginutils": "^4.0.0",
+    "camelcase": "^5.3.1",
+    "estree-walker": "^2.0.1",
+    "is-reference": "^1.2.1",
+    "magic-string": "^0.25.7"
   },
   "eslintIgnore": [
     "test/cases",
