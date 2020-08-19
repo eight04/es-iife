@@ -1,5 +1,7 @@
 (function () {
 
 console.log(foo.bar);
-for (const bar of []);
+for (const bar of []) {
+  console.log(bar);
+}
 })();
