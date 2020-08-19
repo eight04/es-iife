@@ -1,7 +1,7 @@
 es-iife
 =======
 
-[![Build Status](https://travis-ci.org/eight04/es-iife.svg?branch=master)](https://travis-ci.org/eight04/es-iife)
+[![Build Status](https://travis-ci.com/eight04/es-iife.svg?branch=master)](https://travis-ci.com/eight04/es-iife)
 [![codecov](https://codecov.io/gh/eight04/es-iife/branch/master/graph/badge.svg)](https://codecov.io/gh/eight04/es-iife)
 [![install size](https://packagephobia.now.sh/badge?p=es-iife)](https://packagephobia.now.sh/result?p=es-iife)
 
