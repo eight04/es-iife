@@ -83,6 +83,11 @@ The `result` object has following members:
 Changelog
 ---------
 
+* 0.2.1 (Oct 29, 2020)
+
+  - Fix: object shorthand issue.
+  - Bump dependencies. Fix for-loop issue.
+
 * 0.2.0 (Aug 14, 2019)
 
   - Change: define default export with `var`.
