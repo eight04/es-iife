@@ -22,15 +22,15 @@
   "author": "eight04 <eight04@gmail.com>",
   "license": "MIT",
   "devDependencies": {
-    "acorn": "^8.0.1",
-    "c8": "^7.3.0",
-    "eslint": "^7.7.0",
-    "mocha": "^8.1.1",
-    "sinon": "^9.0.3"
+    "acorn": "^8.0.4",
+    "c8": "^7.3.5",
+    "eslint": "^7.12.1",
+    "mocha": "^8.2.0",
+    "sinon": "^9.2.1"
   },
   "dependencies": {
-    "@rollup/pluginutils": "^4.0.0",
-    "camelcase": "^5.3.1",
+    "@rollup/pluginutils": "^4.1.0",
+    "camelcase": "^6.2.0",
     "estree-walker": "^2.0.1",
     "is-reference": "^1.2.1",
     "magic-string": "^0.25.7"
