@@ -1,6 +1,6 @@
 {
   "name": "es-iife",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Transform ES module into a simple IIFE.",
   "keywords": [
     "es",
