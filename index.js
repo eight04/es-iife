@@ -60,6 +60,7 @@ function transform({
   parse,
   ast = parse(code),
   sourcemap = false,
+  strict = false,
   resolveGlobal = () => {},
   name
 }) {
@@ -111,7 +112,7 @@ function transform({
 
   code.appendLeft(
     ast.body[0].start,
-    `${getPrefix()}(function () {\n`
+    `${getPrefix()}(function () {\n${strict ? "'use strict';\n" : ""}`
   );
   code.appendRight(
     ast.body[ast.body.length - 1].end,
