@@ -87,6 +87,10 @@ Returns:
 Changelog
 ---------
 
+* 0.2.2 (Feb 18, 2021)
+
+  - Add: `strict` option.
+
 * 0.2.1 (Oct 29, 2020)
 
   - Fix: object shorthand issue.
