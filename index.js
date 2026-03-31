@@ -4,6 +4,8 @@ const {walk} = require("estree-walker");
 const isReference = require("is-reference");
 const {attachScopes} = require("@rollup/pluginutils");
 
+const {createAssignmentTracker} = require("./lib/assignment-tracker");
+
 function analyzeImport(node, importBindings, code) {
   code.remove(node.start, node.end);
   for (const spec of node.specifiers) {
@@ -36,6 +38,7 @@ function analyzeExportDefault(node, exportBindings, code) {
 
 function analyzeExportNamed(node, exportBindings, code) {
   if (!node.declaration) {
+    // export { foo, bar as baz } from "source";
     for (const spec of node.specifiers) {
       exportBindings.set(
         spec.exported.name, node.source ?
@@ -44,6 +47,7 @@ function analyzeExportNamed(node, exportBindings, code) {
     }
     code.remove(node.start, node.end);
   } else {
+    // export const foo = "123"; or export function foo() {}
     if (node.declaration.type === "VariableDeclaration") {
       for (const dec of node.declaration.declarations) {
         exportBindings.set(dec.id.name, dec.id.name);
@@ -68,8 +72,9 @@ function transform({
   resolveGlobal = createResolveGlobal(resolveGlobal);
 
   const importBindings = new Map; // name -> [property, source]
-  const exportBindings = new Map;
+  const exportBindings = new Map; // exported name -> local name or [property, source]
   let scope = attachScopes(ast, "scope");
+  const assignmentTracker = createAssignmentTracker();
 
   for (const node of ast.body) {
     if (node.type === "ImportDeclaration") {
@@ -102,17 +107,34 @@ function transform({
           overwriteVar(node, parent, `_local_${node.name}`);
         }
       }
+      assignmentTracker.enter(node, parent, scope);
     },
     leave(node) {
+      assignmentTracker.leave(node);
       if (node.scope) {
         scope = node.scope.parent;
       }
     }
   });
 
+  const nodes = assignmentTracker.getRootVariableReassigns();
+  const reassignedExports = nodes.filter(node => {
+    for (const exported of exportBindings.values()) {
+      if (exported === node.name || (Array.isArray(exported) && exported[0] === node.name)) {
+        return true;
+      }
+    }
+    return false;
+  });
+  const shouldReturnUpdatedValue = reassignedExports.length > 0;
+  rewriteExportedBindings(exportBindings, code, resolveGlobal);
+  if (shouldReturnUpdatedValue) {
+    rewriteReassignedExportedBindings(nodes);
+  }
+
   code.appendLeft(
     ast.body[0].start,
-    `${getPrefix()}(function () {\n${strict ? "'use strict';\n" : ""}`
+    `${getPrefix()}(function () {\n${strict ? "'use strict';\n" : ""}${shouldReturnUpdatedValue ? "var __iife_exports = {};\n" : ""}`
   );
   code.appendRight(
     ast.body[ast.body.length - 1].end,
@@ -127,6 +149,9 @@ function transform({
   function getReturn() {
     if (!exportBindings.size) {
       return "";
+    }
+    if (shouldReturnUpdatedValue) {
+      return "return __iife_exports;\n";
     }
     if (exportBindings.size === 1 && exportBindings.has("default")) {
       return `return ${exportBindings.get("default")};\n`;
