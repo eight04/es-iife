@@ -93,7 +93,7 @@ function transform({
         state = {...state, scope: node.scope};
       }
       if (isReference(node, path.at(-1))) {
-        references.push({...state, node});
+        references.push({...state, node, parent: path.at(-1)});
       }
       next(state);
     },
@@ -108,36 +108,50 @@ function transform({
       analyzeExportNamed(node, exportBindings, code);
       next();
     },
-    VariableDeclarator(node, {state, visit}) {
-      visit(node.id, {
-        ...state,
-        assignmentExpression: node,
-        isSimpleAssignment: true
-      });
-      visit(node.init);
+    VariableDeclarator(node, {state, visit, next}) {
+      if (node.init) {
+        visit(node.id, {
+          ...state,
+          assignmentExpression: node,
+          isSimpleAssignment: true
+        });
+        visit(node.init);
+      } else {
+        next();
+      }
     },
     AssignmentExpression(node, {state, path, visit}) {
       visit(node.left, {
         ...state,
         assignmentExpression: node,
-        isSimpleAssignment: path.at(-1).type === "ExpressionStatement"
+        isSimpleAssignment: (node.left.type === "Identifier" || node.left.type === "MemberExpression") && node.operator === "="
       });
-      visit(node.right, state);
+      visit(node.right, {
+        ...state,
+        assignmentExpression: null
+      });
     },
-    ObjectPattern(node, {state, next}) {
-      if (state.assignmentExpression) {
-        next({...state, isSimpleAssignment: false});
-      } else {
-        next();
-      }
+    AssignmentPattern(node, {state, visit}) {
+      visit(node.left);
+      visit(node.right, {
+        ...state,
+        assignmentExpression: null
+      });
     },
-    ArrayPattern(node, {state, next}) {
-      if (state.assignmentExpression) {
-        next({...state, isSimpleAssignment: false});
-      } else {
-        next();
-      }
-    },
+    // ObjectPattern(node, {state, next}) {
+    //   if (state.assignmentExpression) {
+    //     next({...state, isSimpleAssignment: false});
+    //   } else {
+    //     next();
+    //   }
+    // },
+    // ArrayPattern(node, {state, next}) {
+    //   if (state.assignmentExpression) {
+    //     next({...state, isSimpleAssignment: false});
+    //   } else {
+    //     next();
+    //   }
+    // },
     ...makeObj(["ForInStatement", "ForOfStatement"], (node, {state, visit}) => {
       visit(node.left, {
         ...state,
@@ -154,41 +168,32 @@ function transform({
   for (const [, source] of importBindings.values()) {
     globals.add(resolveGlobal(source));
   }
-
-  walk(ast, {
-    enter(node, parent) {
-      if (/^(import|export)/i.test(node.type)) {
-        this.skip();
-      }
-      if (node.scope) {
-        scope = node.scope;
-      }
-      if (isReference(node, parent)) {
-        if (importBindings.has(node.name) && !scope.contains(node.name)) {
-          overwriteVar(node, parent, getBindingName(importBindings.get(node.name)));
-        } else if (globals.has(node.name) && scope.contains(node.name)) {
-          overwriteVar(node, parent, `_local_${node.name}`);
-        }
-      }
-      assignmentTracker.enter(node, parent, scope);
-    },
-    leave(node) {
-      assignmentTracker.leave(node);
-      if (node.scope) {
-        scope = node.scope.parent;
-      }
+  let exportReassigned = false;
+  
+  for (const {node, scope, parent, isSimpleAssignment, assignmentExpression} of references) {
+    const id = getLeftMostIdentifier(node);
+    if (importBindings.has(id.name) && !scope.contains(id.name)) {
+      overwriteVar(id, parent, getBindingName(importBindings.get(id.name)));
+    } else if (globals.has(id.name) && scope.contains(id.name)) {
+      overwriteVar(id, parent, `_local_${id.name}`);
     }
-  });
-
-  const nodes = assignmentTracker.getRootVariableReassigns();
-  const reassignedExports = nodes.filter(node => {
-    for (const exported of exportBindings.values()) {
-      if (exported === node.name || (Array.isArray(exported) && exported[0] === node.name)) {
-        return true;
+    if (assignmentExpression && exportBindings.hasLocal(id.name) && !isLocalVariable(id.name, scope)) {
+      if (!isSimpleAssignment) {
+        throw new TransformError(`Unsupported assignment to ${id.name} at ${assignmentExpression.start}:${assignmentExpression.end}`, assignmentExpression);
       }
+      if (node.type === "MemberExpression") {
+        // nothring to do, the export will be updated in place
+        continue;
+      }
+      if (exportBindings.localToExport(id.name) === "default" && exportBindings.size === 1) {
+        throw new TransformError(`Reassignment to default export is not supported at ${assignmentExpression.start}:${assignmentExpression.end}`, assignmentExpression);
+      }
+      // FIXME: this won't work if we bind one local variable to multiple exports, but that's not a common pattern and we can address it later if needed
+      code.appendRight(assignmentExpression.right.start, `__iife_exports.${exportBindings.localToExport(id.name)} = `);
+      exportReassigned = true;
     }
-    return false;
-  });
+  }
+
   const shouldReturnUpdatedValue = reassignedExports.length > 0;
   rewriteExportedBindings(exportBindings, code, resolveGlobal);
   if (shouldReturnUpdatedValue) {
@@ -197,7 +202,7 @@ function transform({
 
   code.appendLeft(
     ast.body[0].start,
-    `${getPrefix()}(function () {\n${strict ? "'use strict';\n" : ""}${shouldReturnUpdatedValue ? "var __iife_exports = {};\n" : ""}`
+    `${getPrefix()}(function () {\n${strict ? "'use strict';\n" : ""}${exportReassigned ? "var __iife_exports = {};\n" : ""}`
   );
   code.appendRight(
     ast.body[ast.body.length - 1].end,
@@ -213,11 +218,15 @@ function transform({
     if (!exportBindings.size) {
       return "";
     }
-    if (shouldReturnUpdatedValue) {
-      return "return __iife_exports;\n";
-    }
     if (exportBindings.size === 1 && exportBindings.has("default")) {
       return `return ${exportBindings.get("default")};\n`;
+    }
+    if (exportReassigned) {
+      return `${
+        [...exportBindings.entries()]
+          .map(([left, right]) => `__iife_exports.${left} = ${getName(right)};`)
+          .join("\n")
+      }\nreturn __iife_exports;\n`;
     }
     return `return {\n${
       [...exportBindings.entries()]
