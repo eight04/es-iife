@@ -1,10 +1,17 @@
 const camelcase = require("camelcase");
 const MagicString = require("magic-string");
-const {walk} = require("estree-walker");
 const isReference = require("is-reference");
 const {attachScopes} = require("@rollup/pluginutils");
+const {walk} = require("zimmerframe");
 
 const {createAssignmentTracker} = require("./lib/assignment-tracker");
+
+function makeObj(types, fn) {
+  return types.reduce((obj, type) => {
+    obj[type] = fn;
+    return obj;
+  }, {});
+}
 
 function analyzeImport(node, importBindings, code) {
   code.remove(node.start, node.end);
@@ -18,6 +25,7 @@ function analyzeImport(node, importBindings, code) {
 
 function analyzeExportDefault(node, exportBindings, code) {
   if (node.declaration.type === "Identifier") {
+    // export default foo;
     exportBindings.set("default", node.declaration.name);
     code.remove(node.start, node.end);
   } else if (
@@ -26,9 +34,11 @@ function analyzeExportDefault(node, exportBindings, code) {
       node.declaration.type === "FunctionDeclaration"
     )
   ) {
+    // export default function foo() {} or export default class Foo {}
     exportBindings.set("default", node.declaration.id.name);
     code.remove(node.start, node.declaration.start);
   } else {
+    // export default (expression)
     exportBindings.set("default", "_iife_default");
     code.overwrite(node.start, node.declaration.start, "var _iife_default = ", {
       contentOnly: true
@@ -75,16 +85,69 @@ function transform({
   const exportBindings = new Map; // exported name -> local name or [property, source]
   let scope = attachScopes(ast, "scope");
   const assignmentTracker = createAssignmentTracker();
+  const references = []; // MemberExpression | Identifier
 
-  for (const node of ast.body) {
-    if (node.type === "ImportDeclaration") {
+  walk(ast, {scope: null}, {
+    _(node, {state, next, path}) {
+      if (node.scope) {
+        state = {...state, scope: node.scope};
+      }
+      if (isReference(node, path.at(-1))) {
+        references.push({...state, node});
+      }
+      next(state);
+    },
+    ImportDeclaration(node) {
       analyzeImport(node, importBindings, code);
-    } else if (node.type === "ExportDefaultDeclaration") {
+    },
+    ExportDefaultDeclaration(node, {next}) {
       analyzeExportDefault(node, exportBindings, code);
-    } else if (node.type === "ExportNamedDeclaration") {
+      next();
+    },
+    ExportNamedDeclaration(node, {next}) {
       analyzeExportNamed(node, exportBindings, code);
-    }
-  }
+      next();
+    },
+    VariableDeclarator(node, {state, visit}) {
+      visit(node.id, {
+        ...state,
+        assignmentExpression: node,
+        isSimpleAssignment: true
+      });
+      visit(node.init);
+    },
+    AssignmentExpression(node, {state, path, visit}) {
+      visit(node.left, {
+        ...state,
+        assignmentExpression: node,
+        isSimpleAssignment: path.at(-1).type === "ExpressionStatement"
+      });
+      visit(node.right, state);
+    },
+    ObjectPattern(node, {state, next}) {
+      if (state.assignmentExpression) {
+        next({...state, isSimpleAssignment: false});
+      } else {
+        next();
+      }
+    },
+    ArrayPattern(node, {state, next}) {
+      if (state.assignmentExpression) {
+        next({...state, isSimpleAssignment: false});
+      } else {
+        next();
+      }
+    },
+    ...makeObj(["ForInStatement", "ForOfStatement"], (node, {state, visit}) => {
+      visit(node.left, {
+        ...state,
+        assignmentExpression: node,
+        isSimpleAssignment: false
+      });
+      visit(node.right, state);
+      visit(node.body, state);
+    })
+  });
 
   const globals = new Set;
 

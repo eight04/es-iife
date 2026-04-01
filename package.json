@@ -33,7 +33,8 @@
     "camelcase": "^6.2.0",
     "estree-walker": "^2.0.1",
     "is-reference": "^1.2.1",
-    "magic-string": "^0.25.7"
+    "magic-string": "^0.25.7",
+    "zimmerframe": "^1.1.4"
   },
   "eslintIgnore": [
     "test/cases",

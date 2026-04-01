@@ -1,7 +1,6 @@
 /* eslint-env mocha */
 const assert = require("assert");
 const fs = require("fs");
-const sinon = require("sinon"); // eslint-disable-line
 const {parse} = require("acorn");
 const {transform} = require("..");
 
