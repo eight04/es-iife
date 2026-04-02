@@ -104,6 +104,13 @@ async function transform({
         assignmentExpression: null
       });
     },
+    UpdateExpression(node, {state, visit}) {
+      visit(node.argument, {
+        ...state,
+        assignmentExpression: node,
+        isSimpleAssignment: false
+      });
+    },
     // ObjectPattern(node, {state, next}) {
     //   if (state.assignmentExpression) {
     //     next({...state, isSimpleAssignment: false});
