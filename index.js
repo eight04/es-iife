@@ -74,12 +74,13 @@ async function transform({
     },
     VariableDeclarator(node, {state, visit, next, path}) {
       if (node.init) {
+        const declarationNode = path.at(-1);
         visit(node.id, {
           ...state,
           assignmentExpression: node,
           isSimpleAssignment: true,
           // var declarations can either be a declaration or an assignment.
-          isDeclarator: path.at(-1).type === "VariableDeclaration" && path.at(-1).declarations.kind !== "var"
+          isDeclarator: declarationNode && declarationNode.type === "VariableDeclaration" && declarationNode.kind !== "var"
         });
         visit(node.init);
       } else {
