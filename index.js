@@ -5,7 +5,7 @@ const {attachScopes} = require("@rollup/pluginutils");
 
 class TransformError extends Error {
   constructor(message, node) {
-    super(`${message}${node.loc ? `at ${node.loc.start.line}:${node.loc.start.column}` : node.start ? ` at ${node.start}` : ""}`);
+    super(`${message}${node.loc ? ` at ${node.loc.start.line}:${node.loc.start.column}` : node.start ? ` at ${node.start}` : ""}`);
     this.node = node;
   }
 }
@@ -74,12 +74,13 @@ async function transform({
     },
     VariableDeclarator(node, {state, visit, next, path}) {
       if (node.init) {
+        const declarationNode = path.at(-1);
         visit(node.id, {
           ...state,
           assignmentExpression: node,
           isSimpleAssignment: true,
           // var declarations can either be a declaration or an assignment.
-          isDeclarator: path.at(-1).type === "VariableDeclaration" && path.at(-1).declarations.kind !== "var"
+          isDeclarator: declarationNode && declarationNode.type === "VariableDeclaration" && declarationNode.kind !== "var"
         });
         visit(node.init);
       } else {
