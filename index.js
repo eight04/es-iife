@@ -79,8 +79,8 @@ async function transform({
           ...state,
           assignmentExpression: node,
           isSimpleAssignment: true,
-          // var declarations can either be a declaration or an assignment.
-          isDeclarator: declarationNode && declarationNode.type === "VariableDeclaration" && declarationNode.kind !== "var"
+          // var declarations can either be a declaration or an assignment. but assignment can only exists on the critical path, which can be safely ignored.
+          isDeclarator: declarationNode && declarationNode.type === "VariableDeclaration"
         });
         visit(node.init);
       } else {
@@ -173,7 +173,8 @@ async function transform({
         throw new TransformError(`Reassignment to default export is not supported`, assignmentExpression);
       }
       // FIXME: this won't work if we bind one local variable to multiple exports, but that's not a common pattern and we can address it later if needed
-      code.appendRight(assignmentExpression.right.start, `__iife_exports.${es.exportedName} = `);
+      const rightNode = assignmentExpression.right || assignmentExpression.init;
+      code.appendRight(rightNode.start, `__iife_exports.${es.exportedName} = `);
       exportReassigned = true;
     }
   }
