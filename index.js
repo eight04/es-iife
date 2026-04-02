@@ -5,7 +5,7 @@ const {attachScopes} = require("@rollup/pluginutils");
 
 class TransformError extends Error {
   constructor(message, node) {
-    super(`${message}${node.loc ? `at ${node.loc.start.line}:${node.loc.start.column}` : node.start ? ` at ${node.start}` : ""}`);
+    super(`${message}${node.loc ? ` at ${node.loc.start.line}:${node.loc.start.column}` : node.start ? ` at ${node.start}` : ""}`);
     this.node = node;
   }
 }
