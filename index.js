@@ -1,6 +1,5 @@
-const camelcase = require("camelcase");
+const {default: camelcase} = require("camelcase");
 const MagicString = require("magic-string");
-const isReference = require("is-reference");
 const {attachScopes} = require("@rollup/pluginutils");
 // const {walk} = require("zimmerframe");
 
@@ -28,13 +27,6 @@ function makeObj(types, fn) {
   }, {});
 }
 
-function getLeftMostIdentifier(node) {
-  while (node.type === "MemberExpression") {
-    node = node.object;
-  }
-  return node;
-}
-
 async function transform({
   code,
   parse,
@@ -46,6 +38,7 @@ async function transform({
 }) {
   // FIXME: https://github.com/sveltejs/zimmerframe/issues/35
   const {walk} = await import("zimmerframe");
+  const {default: isReference} = await import("is-reference");
   code = new MagicString(code);
   resolveGlobal = createResolveGlobal(resolveGlobal);
 
