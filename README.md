@@ -26,7 +26,7 @@ import foo from "./foo.js";
 const main = (value) => return foo(value);
 export default main;
 `;
-const result = transform({
+const result = await transform({
   code,
   parse,
   name: "doFoo",
@@ -57,7 +57,7 @@ This module exports following members.
 ### transform
 
 ```js
-transform({
+async transform({
   code: String,
   parse?: Function,
   ast?: Object,
@@ -86,6 +86,12 @@ Returns:
 
 Changelog
 ---------
+
+* 0.3.0 (Apr 2, 2026)
+
+  - Change: bump dependencies.
+  - Change: now `transform` is an async function.
+  - Fix: handle reassigned exports e.g. svelte.
 
 * 0.2.2 (Feb 18, 2021)
 
