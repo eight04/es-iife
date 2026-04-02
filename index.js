@@ -2,9 +2,24 @@ const camelcase = require("camelcase");
 const MagicString = require("magic-string");
 const isReference = require("is-reference");
 const {attachScopes} = require("@rollup/pluginutils");
-const {walk} = require("zimmerframe");
+// const {walk} = require("zimmerframe");
 
-const {createAssignmentTracker} = require("./lib/assignment-tracker");
+class TransformError extends Error {
+  constructor(message, node) {
+    super(`${message}${node.loc ? `at ${node.loc.start.line}:${node.loc.start.column}` : node.start ? ` at ${node.start}` : ""}`);
+    this.node = node;
+  }
+}
+
+function isLocalVariable(name, scope) {
+  while (scope.parent) {
+    if (scope.declarations[name]) {
+      return true;
+    }
+    scope = scope.parent;
+  }
+  return false;
+}
 
 function makeObj(types, fn) {
   return types.reduce((obj, type) => {
@@ -13,63 +28,14 @@ function makeObj(types, fn) {
   }, {});
 }
 
-function analyzeImport(node, importBindings, code) {
-  code.remove(node.start, node.end);
-  for (const spec of node.specifiers) {
-    importBindings.set(spec.local.name, [
-      spec.imported ? spec.imported.name : "default",
-      node.source.value
-    ]);
+function getLeftMostIdentifier(node) {
+  while (node.type === "MemberExpression") {
+    node = node.object;
   }
+  return node;
 }
 
-function analyzeExportDefault(node, exportBindings, code) {
-  if (node.declaration.type === "Identifier") {
-    // export default foo;
-    exportBindings.set("default", node.declaration.name);
-    code.remove(node.start, node.end);
-  } else if (
-    node.declaration.id && (
-      node.declaration.type === "ClassDeclaration" ||
-      node.declaration.type === "FunctionDeclaration"
-    )
-  ) {
-    // export default function foo() {} or export default class Foo {}
-    exportBindings.set("default", node.declaration.id.name);
-    code.remove(node.start, node.declaration.start);
-  } else {
-    // export default (expression)
-    exportBindings.set("default", "_iife_default");
-    code.overwrite(node.start, node.declaration.start, "var _iife_default = ", {
-      contentOnly: true
-    });
-  }
-}
-
-function analyzeExportNamed(node, exportBindings, code) {
-  if (!node.declaration) {
-    // export { foo, bar as baz } from "source";
-    for (const spec of node.specifiers) {
-      exportBindings.set(
-        spec.exported.name, node.source ?
-        [spec.local.name, node.source.value] : spec.local.name
-      );
-    }
-    code.remove(node.start, node.end);
-  } else {
-    // export const foo = "123"; or export function foo() {}
-    if (node.declaration.type === "VariableDeclaration") {
-      for (const dec of node.declaration.declarations) {
-        exportBindings.set(dec.id.name, dec.id.name);
-      }
-    } else {
-      exportBindings.set(node.declaration.id.name, node.declaration.id.name);
-    }
-    code.remove(node.start, node.declaration.start);
-  }
-}
-
-function transform({
+async function transform({
   code,
   parse,
   ast = parse(code),
@@ -78,49 +44,56 @@ function transform({
   resolveGlobal = () => {},
   name
 }) {
+  // FIXME: https://github.com/sveltejs/zimmerframe/issues/35
+  const {walk} = await import("zimmerframe");
   code = new MagicString(code);
   resolveGlobal = createResolveGlobal(resolveGlobal);
 
   const importBindings = new Map; // name -> [property, source]
-  const exportBindings = new Map; // exported name -> local name or [property, source]
-  let scope = attachScopes(ast, "scope");
-  const assignmentTracker = createAssignmentTracker();
+  const scope = attachScopes(ast, "scope");
   const references = []; // MemberExpression | Identifier
+  const exportStatements = [];
 
-  walk(ast, {scope: null}, {
-    _(node, {state, next, path}) {
+  walk(ast, {scope}, {
+    _(node, {state, next}) {
       if (node.scope) {
         state = {...state, scope: node.scope};
       }
-      if (isReference(node, path.at(-1))) {
-        references.push({...state, node, parent: path.at(-1)});
-      }
       next(state);
+    },
+    Identifier(node, {state, path}) {
+      const parent = path.at(-1);
+      // NOTE: isReference may return member expression.
+      if (isReference(node, parent)) {
+        references.push({...state, node, parent});
+      }
     },
     ImportDeclaration(node) {
       analyzeImport(node, importBindings, code);
     },
-    ExportDefaultDeclaration(node, {next}) {
-      analyzeExportDefault(node, exportBindings, code);
+    ExportDefaultDeclaration(node, {state, next}) {
+      analyzeExportDefault(node, state);
       next();
     },
-    ExportNamedDeclaration(node, {next}) {
-      analyzeExportNamed(node, exportBindings, code);
-      next();
+    ExportNamedDeclaration(node, {state, visit}) {
+      analyzeExportNamed(node, state, visit);
+      // next({...state, exportDeclaration: node});
     },
-    VariableDeclarator(node, {state, visit, next}) {
+    VariableDeclarator(node, {state, visit, next, path}) {
       if (node.init) {
         visit(node.id, {
           ...state,
           assignmentExpression: node,
-          isSimpleAssignment: true
+          isSimpleAssignment: true,
+          // var declarations can either be a declaration or an assignment.
+          isDeclarator: path.at(-1).type === "VariableDeclaration" && path.at(-1).declarations.kind !== "var"
         });
         visit(node.init);
       } else {
         next();
       }
     },
-    AssignmentExpression(node, {state, path, visit}) {
+    AssignmentExpression(node, {state, visit}) {
       visit(node.left, {
         ...state,
         assignmentExpression: node,
@@ -163,41 +136,45 @@ function transform({
     })
   });
 
-  const globals = new Set;
+  const exportedLocals = exportStatements.reduce((map, e) => {
+    if (map.has(e.localName)) {
+      throw new TransformError(`Duplicate export of local ${e.localName}`, e.node);
+    }
+    map.set(e.localName, e);
+    return map;
+  }, new Map);
+  const exportedExports = exportStatements.reduce((map, e) => {
+    if (map.has(e.exportedName)) {
+      throw new TransformError(`Duplicate export of name ${e.exportedName}`, e.node);
+    }
+    map.set(e.exportedName, e);
+    return map;
+  }, new Map);
 
+  const globals = new Set;
   for (const [, source] of importBindings.values()) {
     globals.add(resolveGlobal(source));
   }
   let exportReassigned = false;
   
-  for (const {node, scope, parent, isSimpleAssignment, assignmentExpression} of references) {
-    const id = getLeftMostIdentifier(node);
-    if (importBindings.has(id.name) && !scope.contains(id.name)) {
-      overwriteVar(id, parent, getBindingName(importBindings.get(id.name)));
-    } else if (globals.has(id.name) && scope.contains(id.name)) {
-      overwriteVar(id, parent, `_local_${id.name}`);
+  for (const {node, scope, parent, isSimpleAssignment, assignmentExpression, isDeclarator} of references) {
+    if (importBindings.has(node.name) && !scope.contains(node.name)) {
+      overwriteVar(node, parent, getBindingName(importBindings.get(node.name)));
+    } else if (globals.has(node.name) && scope.contains(node.name)) {
+      overwriteVar(node, parent, `_local_${node.name}`);
     }
-    if (assignmentExpression && exportBindings.hasLocal(id.name) && !isLocalVariable(id.name, scope)) {
+    const es = exportedLocals.get(node.name);
+    if (es && !es.isExpression && assignmentExpression && !isLocalVariable(node.name, scope) && !isDeclarator && parent.type !== "MemberExpression") {
       if (!isSimpleAssignment) {
-        throw new TransformError(`Unsupported assignment to ${id.name} at ${assignmentExpression.start}:${assignmentExpression.end}`, assignmentExpression);
+        throw new TransformError(`Unsupported assignment to ${node.name}`, assignmentExpression);
       }
-      if (node.type === "MemberExpression") {
-        // nothring to do, the export will be updated in place
-        continue;
-      }
-      if (exportBindings.localToExport(id.name) === "default" && exportBindings.size === 1) {
-        throw new TransformError(`Reassignment to default export is not supported at ${assignmentExpression.start}:${assignmentExpression.end}`, assignmentExpression);
+      if (es.exportedName === "default" && exportedLocals.size === 1) {
+        throw new TransformError(`Reassignment to default export is not supported`, assignmentExpression);
       }
       // FIXME: this won't work if we bind one local variable to multiple exports, but that's not a common pattern and we can address it later if needed
-      code.appendRight(assignmentExpression.right.start, `__iife_exports.${exportBindings.localToExport(id.name)} = `);
+      code.appendRight(assignmentExpression.right.start, `__iife_exports.${es.exportedName} = `);
       exportReassigned = true;
     }
-  }
-
-  const shouldReturnUpdatedValue = reassignedExports.length > 0;
-  rewriteExportedBindings(exportBindings, code, resolveGlobal);
-  if (shouldReturnUpdatedValue) {
-    rewriteReassignedExportedBindings(nodes);
   }
 
   code.appendLeft(
@@ -214,36 +191,129 @@ function transform({
     map: sourcemap ? code.generateMap({hires: true}) : null
   };
 
+  function analyzeImport(node, importBindings, code) {
+    code.remove(node.start, node.end);
+    for (const spec of node.specifiers) {
+      importBindings.set(spec.local.name, [
+        spec.imported ? spec.imported.name : "default",
+        node.source.value
+      ]);
+    }
+  }
+
+  function analyzeExportDefault(node, state) {
+    if (node.declaration.type === "Identifier") {
+      // export default foo;
+      exportStatements.push({
+        ...state,
+        node,
+        localName: node.declaration.name,
+        exportedName: "default",
+        isExpression: true
+      });
+      code.remove(node.start, node.end);
+    } else if (
+      node.declaration.id && (
+        node.declaration.type === "ClassDeclaration" ||
+        node.declaration.type === "FunctionDeclaration"
+      )
+    ) {
+      // export default function foo() {} or export default class Foo {}
+      exportStatements.push({
+        ...state,
+        node,
+        localName: node.declaration.id.name,
+        exportedName: "default"
+      });
+      code.remove(node.start, node.declaration.start);
+    } else {
+      // export default (expression)
+      exportStatements.push({
+        ...state,
+        node,
+        localName: "_iife_default",
+        exportedName: "default",
+        isExpression: true
+      });
+      code.overwrite(node.start, node.declaration.start, "var _iife_default = ", {
+        contentOnly: true
+      });
+    }
+  }
+
+  function analyzeExportNamed(node, state, visit) {
+    if (!node.declaration) {
+      // export { foo, bar as baz } from "source";
+      for (const spec of node.specifiers) {
+        exportStatements.push({
+          node: node,
+          localName: spec.local.name,
+          exportedName: spec.exported.name,
+          source: node.source ? node.source.value : null
+        });
+        visit(spec, {...state, exportDeclaration: node});
+      }
+      if (node.source) {
+        visit(node.source);
+      }
+      code.remove(node.start, node.end);
+    } else {
+      if (node.declaration.type === "VariableDeclaration") {
+        // export const foo = "123";
+        for (const dec of node.declaration.declarations) {
+          exportStatements.push({
+            node: node,
+            localName: dec.id.name,
+            exportedName: dec.id.name
+          });
+          visit(dec.id, {...state, exportDeclaration: node});
+          visit(dec.init);
+        }
+      } else {
+        // export function foo() {} or export class Foo {}
+        exportStatements.push({
+          node: node,
+          localName: node.declaration.id.name,
+          exportedName: node.declaration.id.name
+        });
+        visit(node.declaration.id, {...state, exportDeclaration: node});
+        visit(node.declaration.params);
+        visit(node.declaration.body);
+      }
+      code.remove(node.start, node.declaration.start);
+    }
+  }
+
   function getReturn() {
-    if (!exportBindings.size) {
+    if (!exportedExports.size) {
       return "";
     }
-    if (exportBindings.size === 1 && exportBindings.has("default")) {
-      return `return ${exportBindings.get("default")};\n`;
+    if (exportedExports.size === 1 && exportedExports.has("default")) {
+      return `return ${exportedExports.get("default").localName};\n`;
     }
     if (exportReassigned) {
       return `${
-        [...exportBindings.entries()]
-          .map(([left, right]) => `__iife_exports.${left} = ${getName(right)};`)
+        [...exportedExports.values()]
+          .map(({exportedName, localName, source}) => `__iife_exports.${exportedName} = ${getName(localName, source)};`)
           .join("\n")
       }\nreturn __iife_exports;\n`;
     }
     return `return {\n${
-      [...exportBindings.entries()]
-        .map(([left, right]) => `  ${left}: ${getName(right)}`)
+      [...exportedExports.values()]
+        .map(({exportedName, localName, source}) => `  ${exportedName}: ${getName(localName, source)}`)
         .join(",\n")
     }\n};\n`;
 
-    function getName(name) {
-      if (Array.isArray(name)) {
-        return getBindingName(name);
+    function getName(name, source) {
+      if (source) {
+        return getBindingName([name, source]);
       }
       return name;
     }
   }
 
   function getPrefix() {
-    return exportBindings.size ? `var ${name} = ` : "";
+    return exportedExports.size ? `var ${name} = ` : "";
   }
 
   function getBindingName([prop, source]) {

@@ -1,9 +1,12 @@
 var exported = (function () {
-var _iife_exports = {};
-let foo = _iife_exports.foo = "123";
-setTimeout(() => {
-  foo = _iife_exports.foo = "456";
-  console.log(foo);
+var __iife_exports = {};
+let foo = "123";
+setTimeout(function*(){
+  foo = __iife_exports.foo = "456";
+  foo.bar = "000";
+  const {foo: bar = foo} = foo;
+  console.log(foo, bar);
 }, 1000);
-return _iife_exports;
+__iife_exports.foo = foo;
+return __iife_exports;
 })();
